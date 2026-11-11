@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Sistema de contabilidad personal: registra ingresos y gastos, consulta tu balance y filtra por mes.">
+<title>Sistema de Contabilidad</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#fff; --text:#1f2937; --muted:#6b7280;
+    --primary:#1d4ed8; --green:#16a34a; --red:#dc2626; --border:#e5e7eb;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  .container{max-width:960px;margin:0 auto;padding:24px 16px}
+  header{background:var(--primary);color:#fff;padding:24px 0}
+  header .container{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  h1{font-size:1.5rem}
+  header p{font-size:.9rem;opacity:.85}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:24px 0}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .card .amount{font-size:1.6rem;font-weight:700;margin-top:4px}
+  .amount.positive{color:var(--green)} .amount.negative{color:var(--red)}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:24px}
+  .panel h2{font-size:1rem;margin-bottom:12px}
+  form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  label{font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px}
+  input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%}
+  button{cursor:pointer;background:var(--primary);color:#fff;border:none;font-weight:600}
+  button:hover{opacity:.9}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .toolbar select{width:auto}
+  table{width:100%;border-collapse:collapse;font-size:.9rem}
+  th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted);font-size:.75rem;text-transform:uppercase}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ingreso{color:var(--green)} .gasto{color:var(--red)}
+  .btn-delete{background:transparent;color:var(--muted);padding:4px 8px;width:auto}
+  .btn-delete:hover{color:var(--red)}
+  .empty{color:var(--muted);text-align:center;padding:24px}
+  footer{text-align:center;color:var(--muted);font-size:.8rem;padding:16px}
+  @media (max-width:480px){ td:nth-child(2){display:none} th:nth-child(2){display:none} }
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div>
+      <h1>Sistema de Contabilidad</h1>
+      <p>Registra tus ingresos y gastos y consulta tu balance</p>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="cards" aria-label="Resumen financiero">
+    <div class="card"><h2>Ingresos</h2><p class="amount positive" id="totalIngresos">$0.00</p></div>
+    <div class="card"><h2>Gastos</h2><p class="amount negative" id="totalGastos">$0.00</p></div>
+    <div class="card"><h2>Balance</h2><p class="amount" id="balance">$0.00</p></div>
+  </section>
+
+  <section class="panel" aria-label="Registrar movimiento">
+    <h2>Nuevo movimiento</h2>
+    <form id="form">
+      <div><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
+      <div><label for="descripcion">Descripción</label><input type="text" id="descripcion" placeholder="Ej. Venta de producto" required></div>
+      <div><label for="categoria">Categoría</label>
+        <select id="categoria">
+          <option>Ventas</option><option>Servicios</option><option>Sueldos</option>
+          <option>Renta</option><option>Servicios básicos</option><option>Impuestos</option>
+          <option>Compras</option><option>Otro</option>
+        </select>
+      </div>
+      <div><label for="tipo">Tipo</label>
+        <select id="tipo"><option value="ingreso">Ingreso</option><option value="gasto">Gasto</option></select>
+      </div>
+      <div><label for="monto">Monto</label><input type="number" id="monto" step="0.01" min="0.01" placeholder="0.00" required></div>
+      <div><label>&nbsp;</label><button type="submit">Agregar</button></div>
+    </form>
+  </section>
+
+  <section class="panel" aria-label="Movimientos registrados">
+    <div class="toolbar">
+      <h2>Movimientos</h2>
+      <label for="filtroMes">Mes:
+        <select id="filtroMes"><option value="">Todos</option></select>
+      </label>
+    </div>
+    <table>
+      <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Tipo</th><th class="num">Monto</th><th></th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p class="empty" id="empty" hidden>No hay movimientos registrados.</p>
+  </section>
+</main>
+
+<footer>Los datos se guardan localmente en tu navegador (localStorage).</footer>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "contabilidad.movimientos";
+  var movimientos = [];
+  try { movimientos = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch(e) { movimientos = []; }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var form = $("form"), tbody = $("tbody"), filtroMes = $("filtroMes");
+
+  function guardar(){ localStorage.setItem(KEY, JSON.stringify(movimientos)); }
+  function fmt(n){ return "$" + n.toFixed(2); }
+  function fechaISO(f){ return f.slice(0,7); }
+
+  function meses(){
+    var set = {};
+    movimientos.forEach(function(m){ set[fechaISO(m.fecha)] = true; });
+    return Object.keys(set).sort().reverse();
+  }
+
+  function renderFiltros(){
+    var actual = filtroMes.value;
+    filtroMes.innerHTML = '<option value="">Todos</option>';
+    meses().forEach(function(mes){
+      var o = document.createElement("option");
+      o.value = mes; o.textContent = mes;
+      filtroMes.appendChild(o);
+    });
+    filtroMes.value = actual;
+  }
+
+  function render(){
+    var mes = filtroMes.value;
+    var lista = movimientos.filter(function(m){ return !mes || fechaISO(m.fecha) === mes; });
+    var ingresos = 0, gastos = 0;
+
+    tbody.innerHTML = "";
+    lista.forEach(function(m){
+      if (m.tipo === "ingreso") ingresos += m.monto; else gastos += m.monto;
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + m.fecha + "</td>" +
+        "<td>" + m.categoria + "</td>" +
+        "<td>" + m.descripcion.replace(/</g,"&lt;") + "</td>" +
+        '<td class="' + m.tipo + '">' + (m.tipo === "ingreso" ? "Ingreso" : "Gasto") + "</td>" +
+        '<td class="num">' + fmt(m.monto) + "</td>" +
+        '<td><button type="button" class="btn-delete" data-id="' + m.id + '" aria-label="Eliminar">✕</button></td>';
+      tbody.appendChild(tr);
+    });
+
+    var balance = ingresos - gastos;
+    $("totalIngresos").textContent = fmt(ingresos);
+    $("totalGastos").textContent = fmt(gastos);
+    var bal = $("balance");
+    bal.textContent = fmt(balance);
+    bal.className = "amount " + (balance >= 0 ? "positive" : "negative");
+    $("empty").hidden = lista.length > 0;
+  }
+
+  form.addEventListener("submit", function(ev){
+    ev.preventDefault();
+    movimientos.push({
+      id: Date.now(),
+      fecha: $("fecha").value,
+      descripcion: $("descripcion").value.trim(),
+      categoria: $("categoria").value,
+      tipo: $("tipo").value,
+      monto: parseFloat($("monto").value)
+    });
+    guardar(); renderFiltros(); render(); form.reset();
+  });
+
+  tbody.addEventListener("click", function(ev){
+    var btn = ev.target.closest(".btn-delete");
+    if (!btn) return;
+    movimientos = movimientos.filter(function(m){ return String(m.id) !== btn.dataset.id; });
+    guardar(); renderFiltros(); render();
+  });
+
+  filtroMes.addEventListener("change", render);
+
+  var hoy = new Date().toISOString().slice(0,10);
+  $("fecha").value = hoy;
+  renderFiltros(); render();
+})();
+</script>
+</body>
+</html>
